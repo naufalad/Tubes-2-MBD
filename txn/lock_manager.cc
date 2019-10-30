@@ -30,31 +30,3 @@ LockMode LockManagerA::Status(const Key& key, vector<Txn*>* owners) {
   // Implement this method!
   return UNLOCKED;
 }
-
-LockManagerB::LockManagerB(deque<Txn*>* ready_txns) {
-  ready_txns_ = ready_txns;
-}
-
-bool LockManagerB::WriteLock(Txn* txn, const Key& key) {
-  //
-  // Implement this method!
-  return true;
-}
-
-bool LockManagerB::ReadLock(Txn* txn, const Key& key) {
-  //
-  // Implement this method!
-  return true;
-}
-
-void LockManagerB::Release(Txn* txn, const Key& key) {
-  //
-  // Implement this method!
-}
-
-LockMode LockManagerB::Status(const Key& key, vector<Txn*>* owners) {
-  //
-  // Implement this method!
-  return UNLOCKED;
-}
-
