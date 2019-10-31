@@ -122,6 +122,5 @@ class LockManagerA : public LockManager {
   virtual LockMode Status(const Key& key, vector<Txn*>* owners);
   deque<LockRequest>* getLockQueue(const Key& key);
 };
-
 #endif  // _LOCK_MANAGER_H_
 
