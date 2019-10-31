@@ -120,18 +120,7 @@ class LockManagerA : public LockManager {
   virtual bool WriteLock(Txn* txn, const Key& key);
   virtual void Release(Txn* txn, const Key& key);
   virtual LockMode Status(const Key& key, vector<Txn*>* owners);
-};
-
-// Version of the LockManager implementing both shared and exclusive locks.
-class LockManagerB : public LockManager {
- public:
-  explicit LockManagerB(deque<Txn*>* ready_txns);
-  inline virtual ~LockManagerB() {}
-
-  virtual bool ReadLock(Txn* txn, const Key& key);
-  virtual bool WriteLock(Txn* txn, const Key& key);
-  virtual void Release(Txn* txn, const Key& key);
-  virtual LockMode Status(const Key& key, vector<Txn*>* owners);
+  deque<LockRequest>* getLockQueue(const Key& key);
 };
 
 #endif  // _LOCK_MANAGER_H_
