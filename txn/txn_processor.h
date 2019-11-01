@@ -75,9 +75,7 @@ class TxnProcessor {
   // OCC version of scheduler.
   void RunOCCScheduler();
 
-  // OCC version of scheduler with parallel validation.
-  void RunOCCParallelScheduler();
-  
+ 
   // MVCC version of scheduler.
   void RunMVCCScheduler();
 

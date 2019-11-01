@@ -19,9 +19,16 @@ LockManagerA::LockManagerA(deque<Txn*>* ready_txns) {
 }
 
 bool LockManagerA::WriteLock(Txn* txn, const Key& key) {
-  //
-  // Implement this method!
-  return true;
+  LockRequest rq(EXCLUSIVE, txn);
+  deque<LockRequest> *dq = getLockQueue(key);
+
+  bool empty = dq->empty();
+  dq->push_back(rq);
+  
+  if(!empty){
+    txn_waits_[txn]++;
+  }
+  return empty;
 }
 
 bool LockManagerA::ReadLock(Txn* txn, const Key& key) {
@@ -49,7 +56,13 @@ void LockManagerA::Release(Txn* txn, const Key& key) {
 }
 
 LockMode LockManagerA::Status(const Key& key, vector<Txn*>* owners) {
-  //
-  // Implement this method!
-  return UNLOCKED;
+  deque<LockRequest> *dq = getLockQueue(key);
+  if(dq->empty()){
+    return UNLOCKED;
+  }else{
+    vector<Txn*> tempOwner;
+    tempOwner.push_back(dq->front().txn_);
+    *owners = tempOwner;
+    return EXCLUSIVE;
+  }
 }

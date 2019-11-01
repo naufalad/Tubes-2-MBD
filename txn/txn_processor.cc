@@ -76,7 +76,6 @@ void TxnProcessor::RunScheduler() {
     case LOCKING:                RunLockingScheduler(); break;
     case LOCKING_EXCLUSIVE_ONLY: RunLockingScheduler(); break;
     case OCC:                    RunOCCScheduler(); break;
-    case P_OCC:                  RunOCCParallelScheduler(); break;
     case MVCC:                   RunMVCCScheduler();
   }
 }
@@ -262,18 +261,6 @@ void TxnProcessor::RunOCCScheduler() {
   RunSerialScheduler();
 }
 
-void TxnProcessor::RunOCCParallelScheduler() {
-  //
-  // Implement this method! Note that implementing OCC with parallel
-  // validation may need to create another method, like
-  // TxnProcessor::ExecuteTxnParallel.
-  // Note that you can use active_set_ and active_set_mutex_ we provided
-  // for you in the txn_processor.h
-  //
-  // [For now, run serial scheduler in order to make it through the test
-  // suite]
-  RunSerialScheduler();
-}
 
 void TxnProcessor::RunMVCCScheduler() {
   //
