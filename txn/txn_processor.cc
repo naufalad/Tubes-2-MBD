@@ -12,8 +12,6 @@ TxnProcessor::TxnProcessor(CCMode mode)
     : mode_(mode), tp_(THREAD_COUNT), next_unique_id_(1) {
   if (mode_ == LOCKING_EXCLUSIVE_ONLY)
     lm_ = new LockManagerA(&ready_txns_);
-  else if (mode_ == LOCKING)
-    lm_ = new LockManagerB(&ready_txns_);
   
   // Create the storage
   if (mode_ == MVCC) {
@@ -250,16 +248,63 @@ void TxnProcessor::ApplyWrites(Txn* txn) {
     storage_->Write(it->first, it->second, txn->unique_id_);
   }
 }
+bool TxnProcessor::OCCValidateTransaction(const Txn &txn) const {
+  // Check
+  for (auto&& key : txn.readset_) {
+    if (txn.occ_start_time_ < storage_->Timestamp(key))
+      return false;
+  }
+
+  for (auto&& key : txn.writeset_) {
+    if (txn.occ_start_time_ < storage_->Timestamp(key))
+      return false;
+  }
+
+  return true;
+}
+
 
 void TxnProcessor::RunOCCScheduler() {
-  //
-  // Implement this method!
-  //
-  // [For now, run serial scheduler in order to make it through the test
-  // suite]
+  while (tp_.Active()) {
+    Txn *txn;
+    if (txn_requests_.Pop(&txn)) {
 
-  RunSerialScheduler();
+      // Start txn running in its own thread.
+      tp_.RunTask(new Method<TxnProcessor, void, Txn*>(
+                  this,
+                  &TxnProcessor::ExecuteTxn,
+                  txn));
+    }
+
+    // Validate completed transactions, serially
+    Txn *finished;
+    while (completed_txns_.Pop(&finished)) {
+      if (finished->Status() == COMPLETED_A) {
+        finished->status_ = ABORTED;
+      } else {
+        bool valid = OCCValidateTransaction(*finished);
+        if (!valid) {
+          // Cleanup and restart
+          finished->reads_.empty();
+          finished->writes_.empty();
+          finished->status_ = INCOMPLETE;
+
+          mutex_.Lock();
+          txn->unique_id_ = next_unique_id_;
+          next_unique_id_++;
+          txn_requests_.Push(finished);
+          mutex_.Unlock();
+        } else {
+          // Commit the transaction
+          ApplyWrites(finished);
+          txn->status_ = COMMITTED;
+          txn_results_.Push(finished);
+        }
+      }
+    }
+  }
 }
+
 
 
 void TxnProcessor::RunMVCCScheduler() {
