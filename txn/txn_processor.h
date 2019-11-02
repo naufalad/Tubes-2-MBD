@@ -74,7 +74,7 @@ class TxnProcessor {
 
   // OCC version of scheduler.
   void RunOCCScheduler();
-  bool OCCValidateTransaction(const Txn &txn) const;
+
  
   // MVCC version of scheduler.
   void RunMVCCScheduler();
