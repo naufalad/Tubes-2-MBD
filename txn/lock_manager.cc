@@ -4,7 +4,12 @@
 
 #include "txn/lock_manager.h"
 
-
+LockManager::~LockManager() {
+  // Cleanup lock_table_
+  for (auto it = lock_table_.begin(); it != lock_table_.end(); it++) {
+    delete it->second;
+  }
+}
 deque<LockManagerA::LockRequest>* LockManagerA::getLockQueue(const Key& key){
   deque<LockRequest> *dq = lock_table_[key];
   if(!dq){
@@ -48,7 +53,7 @@ void LockManagerA::Release(Txn* txn, const Key& key) {
   }
   if(!queue->empty() && owner){
     LockRequest next = queue->front();
-    if(--txn_waits_[next.txn_]){
+    if(--txn_waits_[next.txn_] == 0){
       ready_txns_ -> push_back(next.txn_);
       txn_waits_.erase(next.txn_);
     }

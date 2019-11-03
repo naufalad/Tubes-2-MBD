@@ -1,3 +1,6 @@
+// Author: Alexander Thomson (thomson@cs.yale.edu)
+// Modified by: Christina Wallin (christina.wallin@yale.edu)
+// Modified by: Kun Ren (kun.ren@yale.edu)
 
 #ifndef _TXN_PROCESSOR_H_
 #define _TXN_PROCESSOR_H_
@@ -25,9 +28,11 @@ using std::string;
 // the four parts of assignment 2, plus a simple serial (non-concurrent) mode.
 enum CCMode {
   SERIAL = 0,                  // Serial transaction execution (no concurrency)
-  LOCKING_EXCLUSIVE_ONLY = 1,  // Part 1A         
-  OCC = 2,                     // Part 2
-  MVCC = 3,
+  LOCKING_EXCLUSIVE_ONLY = 1,  // Part 1A
+  LOCKING = 2,                 // Part 1B
+  OCC = 3,                     // Part 2
+  P_OCC = 4,                   // Part 3
+  MVCC = 5,
 };
 
 // Returns a human-readable string naming of the providing mode.
@@ -50,11 +55,12 @@ class TxnProcessor {
   // Returns a pointer to the next COMMITTED or ABORTED Txn. The caller takes
   // ownership of the returned Txn.
   Txn* GetTxnResult();
+
   // Main loop implementing all concurrency control/thread scheduling.
   void RunScheduler();
-  
+
   static void* StartScheduler(void * arg);
-  
+
  private:
 
   // Serial validation
@@ -69,10 +75,13 @@ class TxnProcessor {
   // Locking version of scheduler.
   void RunLockingScheduler();
 
+  // Determine whether a txn is valid in the occ scheduler.
+  bool OCCValidateTransaction(const Txn &txn) const;
+
   // OCC version of scheduler.
   void RunOCCScheduler();
-  bool OCCValidateTransaction(const Txn &txn) const;
- 
+
+
   // MVCC version of scheduler.
   void RunMVCCScheduler();
 
@@ -84,18 +93,18 @@ class TxnProcessor {
   //
   // Requires: txn->Status() is COMPLETED_C.
   void ApplyWrites(Txn* txn);
-  
+
   // The following functions are for MVCC
   void MVCCExecuteTxn(Txn* txn);
-    
+
   bool MVCCCheckWrites(Txn* txn);
 
   void MVCCLockWriteKeys(Txn* txn);
 
   void MVCCUnlockWriteKeys(Txn* txn);
-  
+
   void GarbageCollection();
-  
+
   // Concurrency control mechanism the TxnProcessor is currently using.
   CCMode mode_;
 
@@ -124,7 +133,7 @@ class TxnProcessor {
   // Queue of transaction results (already committed or aborted) to be returned
   // to client.
   AtomicQueue<Txn*> txn_results_;
-  
+
   // Set of transactions that are currently in the process of parallel
   // validation.
   AtomicSet<Txn*> active_set_;
