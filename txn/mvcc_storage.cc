@@ -95,7 +95,6 @@ void MVCCStorage::Write(Key key, Value value, int txn_unique_id) {
   // Note that you don't have to call Lock(key) in this method, just
   // call Lock(key) before you call this method and call Unlock(key) afterward.
   // Note that the performance would be much better if you organize the versions in decreasing order.
-  Lock(key);
   if (CheckWrite(key, txn_unique_id)) {
     Version v = {
       .value_ = value,
@@ -105,7 +104,6 @@ void MVCCStorage::Write(Key key, Value value, int txn_unique_id) {
     deque<Version*> *data_value = mvcc_data_[key];
     data_value->push_back(&v);
   }
-  Unlock(key);
 }
 
 
