@@ -10,7 +10,7 @@
 #include "txn/lock_manager.h"
 
 // Thread & queue counts for StaticThreadPool initialization.
-#define THREAD_COUNT 8
+#define THREAD_COUNT 4
 
 TxnProcessor::TxnProcessor(CCMode mode)
     : mode_(mode), tp_(THREAD_COUNT), next_unique_id_(1) {
@@ -334,7 +334,6 @@ void TxnProcessor::RunOCCParallelScheduler() {
   // suite]
   RunSerialScheduler();
 }
-
 void TxnProcessor::RunMVCCScheduler() {
   // CPSC 438/538:
   //
@@ -345,6 +344,97 @@ void TxnProcessor::RunMVCCScheduler() {
   //
   // [For now, run serial scheduler in order to make it through the test
   // suite]
-  RunSerialScheduler();
+  while (tp_.Active()) {
+
+
+    Txn *txn;
+    if (txn_requests_.Pop(&txn)) {
+      // Start txn running in its own thread.
+      tp_.RunTask(new Method<TxnProcessor, void, Txn*>(
+                  this,
+                  &TxnProcessor::MVCCExecuteTxn,
+                  txn));
+    }
+    // Validate completed transactions, serially
+    Txn *finished;
+    while (completed_txns_.Pop(&finished)) {
+      if (finished->Status() == COMPLETED_A) {
+        finished->status_ = ABORTED;
+      } else {
+        MVCCLockWriteKeys(txn);
+        bool valid = MVCCCheckWrites(txn);
+        if (!valid) {
+          MVCCUnlockWriteKeys(txn);    
+          // Cleanup
+          finished->reads_.empty();
+          finished->writes_.empty();
+          finished->status_ = INCOMPLETE;
+
+          // Restart
+          mutex_.Lock();
+          txn->unique_id_ = next_unique_id_;
+          next_unique_id_++;
+          txn_requests_.Push(finished);
+          mutex_.Unlock();
+        } else {
+      
+          // Commit the transaction
+          ApplyWrites(finished);
+          txn->status_ = COMMITTED;
+          MVCCUnlockWriteKeys(finished);
+        }
+      }
+      txn_results_.Push(finished);
+    }
+  }
+  // RunSerialScheduler();
 }
 
+void TxnProcessor::MVCCExecuteTxn(Txn* txn) {
+  // Get the start time
+  txn->occ_start_time_ = GetTime();
+
+  // Read everything in from readset.
+  for (set<Key>::iterator it = txn->readset_.begin();
+       it != txn->readset_.end(); ++it) {
+    // Save each read result iff record exists in storage.
+    Value result;
+    if (storage_->Read(*it, &result, txn->unique_id_))
+      txn->reads_[*it] = result;
+  }
+
+  // Also read everything in from writeset.
+  for (set<Key>::iterator it = txn->writeset_.begin();
+       it != txn->writeset_.end(); ++it) {
+    // Save each read result iff record exists in storage.
+    Value result;
+    if (storage_->Read(*it, &result, txn->unique_id_))
+      txn->reads_[*it] = result;
+  }
+
+  // Execute txn's program logic.
+  txn->Run();
+
+  // Hand the txn back to the RunScheduler thread.
+  completed_txns_.Push(txn);
+}
+
+bool TxnProcessor::MVCCCheckWrites(Txn* txn){
+  for (auto&& key : txn->writeset_) {
+    if (!storage_->CheckWrite(key, txn->unique_id_))
+      return false;
+  }
+  return true;
+}
+
+void TxnProcessor::MVCCLockWriteKeys(Txn* txn){
+  for (auto&& key : txn->writeset_) {
+    storage_->Lock(key);
+  }
+}
+
+void TxnProcessor::MVCCUnlockWriteKeys(Txn* txn){
+  for (auto&& key : txn->writeset_) {
+    storage_->Unlock(key);
+  }
+}
