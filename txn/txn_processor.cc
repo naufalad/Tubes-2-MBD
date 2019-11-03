@@ -265,8 +265,8 @@ bool TxnProcessor::OCCValidateTransaction(const Txn &txn) const {
 
 
 void TxnProcessor::RunOCCScheduler() {
+  Txn *txn;
   while (tp_.Active()) {
-    Txn *txn;
     if (txn_requests_.Pop(&txn)) {
 
       // Start txn running in its own thread.
@@ -279,9 +279,7 @@ void TxnProcessor::RunOCCScheduler() {
     // Validate completed transactions, serially
     Txn *finished;
     while (completed_txns_.Pop(&finished)) {
-      if (finished->Status() == COMPLETED_A) {
-        finished->status_ = ABORTED;
-      } else {
+      if (finished->Status() != COMPLETED_A) {
         bool valid = OCCValidateTransaction(*finished);
         if (!valid) {
           // Cleanup and restart
@@ -292,15 +290,15 @@ void TxnProcessor::RunOCCScheduler() {
           mutex_.Lock();
           txn->unique_id_ = next_unique_id_;
           next_unique_id_++;
-          txn_requests_.Push(finished);
           mutex_.Unlock();
         } else {
           // Commit the transaction
           ApplyWrites(finished);
           txn->status_ = COMMITTED;
-          txn_results_.Push(finished);
+          txn_requests_.Push(finished);
         }
       }
+      txn_results_.Push(finished);
     }
   }
 }
