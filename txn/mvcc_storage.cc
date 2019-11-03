@@ -46,7 +46,21 @@ bool MVCCStorage::Read(Key key, Value* result, int txn_unique_id) {
   // Hint: Iterate the version_lists and return the verion whose write timestamp
   // (version_id) is the largest write timestamp less than or equal to txn_unique_id.
   
-  return true;
+  if (mvcc_data_.count(key)){
+    deque<Version*> *data_value = mvcc_data_[key];
+    if (!data_value->empty()){
+       deque<Version*> version_value = *data_value;
+      for (deque<Version*>::iterator itr = version_value.begin(); itr != version_value.end(); ++itr){
+        Version* value = *itr;
+        if (value->version_id_ <= txn_unique_id) {
+          *result = value->value_;
+          value->max_read_id_ = txn_unique_id;
+          return true;
+        }
+      }
+    }
+  }
+  return false;
 }
 
 
@@ -61,8 +75,13 @@ bool MVCCStorage::CheckWrite(Key key, int txn_unique_id) {
   // write_set. Return true if this key passes the check, return false if not. 
   // Note that you don't have to call Lock(key) in this method, just
   // call Lock(key) before you call this method and call Unlock(key) afterward.
-  
-  
+  deque<Version*> *data_value = mvcc_data_[key];
+  if (!data_value->empty()){
+    Version* v = data_value->back();
+    if (v->max_read_id_ > txn_unique_id) {
+      return false;
+    }
+  }
   return true;
 }
 
@@ -76,6 +95,17 @@ void MVCCStorage::Write(Key key, Value value, int txn_unique_id) {
   // Note that you don't have to call Lock(key) in this method, just
   // call Lock(key) before you call this method and call Unlock(key) afterward.
   // Note that the performance would be much better if you organize the versions in decreasing order.
+  Lock(key);
+  if (CheckWrite(key, txn_unique_id)) {
+    Version v = {
+      .value_ = value,
+      .max_read_id_ = txn_unique_id,
+      .version_id_ = txn_unique_id
+    };
+    deque<Version*> *data_value = mvcc_data_[key];
+    data_value->push_back(&v);
+  }
+  Unlock(key);
 }
 
 
