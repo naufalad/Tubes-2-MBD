@@ -318,10 +318,10 @@ void TxnProcessor::RunMVCCScheduler() {
   //
   // [For now, run serial scheduler in order to make it through the test
   // suite]
+  Txn *txn;
   while (tp_.Active()) {
 
 
-    Txn *txn;
     if (txn_requests_.Pop(&txn)) {
       // Start txn running in its own thread.
       tp_.RunTask(new Method<TxnProcessor, void, Txn*>(
@@ -329,45 +329,10 @@ void TxnProcessor::RunMVCCScheduler() {
                   &TxnProcessor::MVCCExecuteTxn,
                   txn));
     }
-    // Validate completed transactions, serially
-    Txn *finished;
-    while (completed_txns_.Pop(&finished)) {
-      if (finished->Status() == COMPLETED_A) {
-        finished->status_ = ABORTED;
-      } else {
-        MVCCLockWriteKeys(txn);
-        bool valid = MVCCCheckWrites(txn);
-        if (!valid) {
-          MVCCUnlockWriteKeys(txn);    
-          // Cleanup
-          finished->reads_.empty();
-          finished->writes_.empty();
-          finished->status_ = INCOMPLETE;
-
-          // Restart
-          mutex_.Lock();
-          txn->unique_id_ = next_unique_id_;
-          next_unique_id_++;
-          txn_requests_.Push(finished);
-          mutex_.Unlock();
-        } else {
-      
-          // Commit the transaction
-          ApplyWrites(finished);
-          txn->status_ = COMMITTED;
-          MVCCUnlockWriteKeys(finished);
-        }
-      }
-      txn_results_.Push(finished);
-    }
   }
-  // RunSerialScheduler();
 }
 
 void TxnProcessor::MVCCExecuteTxn(Txn* txn) {
-  // Get the start time
-  txn->occ_start_time_ = GetTime();
-
   // Read everything in from readset.
   for (set<Key>::iterator it = txn->readset_.begin();
        it != txn->readset_.end(); ++it) {
@@ -390,7 +355,29 @@ void TxnProcessor::MVCCExecuteTxn(Txn* txn) {
   txn->Run();
 
   // Hand the txn back to the RunScheduler thread.
-  completed_txns_.Push(txn);
+  MVCCLockWriteKeys(txn);
+  bool valid = MVCCCheckWrites(txn);
+  if (!valid) {
+    MVCCUnlockWriteKeys(txn);    
+    // Cleanup
+    txn->reads_.empty();
+    txn->writes_.empty();
+    txn->status_ = INCOMPLETE;
+
+    // Restart
+    mutex_.Lock();
+    txn->unique_id_ = next_unique_id_;
+    next_unique_id_++;
+    txn_requests_.Push(txn);
+    mutex_.Unlock();
+  } else {
+
+    // Commit the transaction
+    ApplyWrites(txn);
+    txn->status_ = COMMITTED;
+    MVCCUnlockWriteKeys(txn);
+    txn_results_.Push(txn);
+  }
 }
 
 bool TxnProcessor::MVCCCheckWrites(Txn* txn){
